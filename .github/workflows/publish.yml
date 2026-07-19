@@ -1,0 +1,24 @@
+name: Publish
+
+# Publishes the gem to RubyGems when a version tag is pushed (e.g. v0.1.0).
+# Requires the RUBYGEMS_API_KEY secret to be set on the repository.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - name: Test before publish
+        run: ruby test/run.rb
+      - name: Build
+        run: gem build ai2web.gemspec
+      - name: Publish to RubyGems
+        env:
+          GEM_HOST_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
+        run: gem push ai2web-*.gem

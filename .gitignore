@@ -1,0 +1,8 @@
+*.gem
+/pkg/
+/tmp/
+/.bundle/
+/vendor/bundle
+Gemfile.lock
+.ruby-version
+.DS_Store
