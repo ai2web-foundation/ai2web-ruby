@@ -178,5 +178,70 @@ check(ajr2[:status] == 200 && ajr2[:body]["policies"]["governance"]["rate_limits
 llpost = handle(srv, "POST", "/llms.txt")
 check(llpost[:status] == 405, "server: /llms.txt POST -> 405")
 
+# AP2 (Agent Payments Protocol) merchant primitives
+ap2_key = <<~PEM
+  -----BEGIN PRIVATE KEY-----
+  MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC7/yKHuyEHpcRo
+  Zahdi0IJeDyBoy7jV73flum/ysm3H3nK1lh7WHPNV1r27rOodKAIiJH/yVrKcAeR
+  qRyDgJ8ftAIla/qj9zDu3h5rR40wRDM60DhpkjMoHa2aQ3Lh93wH004k40HxvWOA
+  FORAZPrxo4JJTA7Qayak4VwWH2zepeSpmqO3kovZR4DDeDRJf/UnWC5fDAvQno+W
+  c2lVdbzeErLS1TvbmVDVfIwPkE008gZWEhQ/qK3RSoQEUxqeqaA8BM/WYdQr+PDv
+  EJgT0MfECcV+6ACMNHTCzspVRkE3pPcM2PVJekbGlirzxYMn2i0Hs0xgz1lwjEAb
+  /pIA3Vh1AgMBAAECggEAGRI5ZKiMCx0MSG/mODNuJx0l1JQSmLcG116k5bMBm65S
+  674SJsDxEJ1pwCytQPXssbak4dvUg9LU75QB/XeVwQCcmKkB0AQTPofYvq3YImu1
+  +U3zeADLWbo7gKsmEwSSQejoLvsvvDFpp5chqYTOApOvuF6wSxM/IBX91eVy+24h
+  sQgxxwmYtwaFqiW56oNcF+8OZVCenZF4NWGfJ6vDxyIgkfvlhPSzQl8BimzIB2j+
+  hs5S4TYY1fE7pcuI91zk2dGpK9E1nxl3e57gZJ19w+YrhOXvatOSX++QeBrv2Vik
+  kU1SbJq5K3fcGvjkEYXRqth0loTbZl3HxOgef4QksQKBgQDlxWxaQFrsa5pFP1a2
+  iklsuIbKr/0DgHuENzlZtrUPzbzCYBQT28ADa+3HZIvXvNo4bUbHayrrwQh6nFWl
+  n0JUVl3JzUcGJO6nJH/4uLI/G4NkMz/BW5G1fMnfpEBc2LAWbGYE0tgFxL/uvTeL
+  o5zTI3ElZX5FsMb/KAoU5J8TYwKBgQDRdPA5ydXMoooQQ3mYc/UUdnVZPtiN0G1j
+  +v/QyH5+0SEbj5AUaIbuTblNANRZsiz0OjJ4i5ZrXLRXOwYL0WvcC2we1KnRaomv
+  dNmdQwu31YRnxEq97/3dSBJC7K0VkiRjrLIZD/dDDUnjFjBD1fa51AcedXmPJNjf
+  3RyTYcKoRwKBgQDh8x2VNtnyyfHADQQ5p42C04cBxMSbb/qGz0OffHNbIidwQckc
+  qimNc9I1FSQLuBQkDxneOv3PLlknMZtrrkws4W2DaFFismjZhqQts3rdYjH4FAmr
+  HGASR6/BNCVy6EdpFZnRPoHeUlen7vyzXeZ3HtBCRSdCYw+dlQMs/pGMHwKBgQCG
+  igaEGBEskHr+V1kTg+g4bJ6T5LpU3TxmrCMFiMM30jzh5yU09q81AtezjoTX2Irn
+  lTo2E/NaowFzxoXrsWkGvo+EfjVWPoiSGwxs51PvkUarIHqh5jW6nUCdnEjRQj39
+  iEAduROqDi8XnnkCGb2RP5ATEII0YAauROjGAlV2oQKBgD4yneSwi1i8gfd4fEUS
+  tuRB4AkX6EHw6E9Zjj/gwttVt1vYM8dbam5aZPlP602yRRUrt0T101zE+s0SBQZh
+  9IUctJHxGO/5cufDZvovw2pXKlZkcpDxwPoKiUQZxiPBXf8YfKHUXz0gSc6QHAzu
+  XinNZUVoxqiVkt4smBecyfGS
+  -----END PRIVATE KEY-----
+PEM
+
+ap2t = Ai2Web::Ap2.transport
+check(ap2t["enabled"] == true && ap2t["version"] == "0.2.0", "ap2: transport advertises version")
+check(ap2t["extension"].include?("ap2"), "ap2: transport carries the extension uri")
+
+ap2_intent = Ai2Web::Ap2.intent_mandate("a red basketball shoe", skus: ["SHOE-1"], now: 1000)
+check(ap2_intent["natural_language_description"] == "a red basketball shoe" && ap2_intent["skus"] == ["SHOE-1"] && !ap2_intent["intent_expiry"].empty?, "ap2: intent mandate built")
+
+ap2_contents = Ai2Web::Ap2.cart_contents([{ label: "Mug", unit_amount: 9.99, quantity: 3 }], "GBP", "Test Store", now: 1000)
+ap2_val = ap2_contents["payment_request"]["details"]["total"]["amount"]["value"]
+check(ap2_val == 29.97, "ap2: cart total = 3 x 9.99", ap2_val)
+check(ap2_contents["payment_request"]["details"]["total"]["amount"]["currency"] == "GBP", "ap2: cart currency major units")
+
+ap2_mandate = Ai2Web::Ap2.cart_mandate(ap2_contents, ap2_key)
+check(ap2_mandate["merchant_authorization"].count(".") == 2, "ap2: cart mandate is a JWT")
+ap2_jwks = Ai2Web::Ap2.jwks(ap2_key)
+check(ap2_jwks["keys"][0]["kty"] == "RSA" && !ap2_jwks["keys"][0]["n"].empty? && ap2_jwks["keys"][0]["alg"] == "RS256", "ap2: jwks publishes the RSA signing key")
+check(Ai2Web::Ap2.verify_cart_mandate(ap2_mandate, ap2_key) == true, "ap2: valid cart mandate verifies")
+
+# Tamper: change the total; verification must fail.
+ap2_tampered = JSON.parse(JSON.generate(ap2_mandate))
+ap2_tampered["contents"]["payment_request"]["details"]["total"]["amount"]["value"] = 0.01
+check(Ai2Web::Ap2.verify_cart_mandate(ap2_tampered, ap2_key) == false, "ap2: tampered cart mandate fails verification")
+
+ap2_pd = Ai2Web::Ap2.payment_details({
+  "payment_mandate_contents" => {
+    "payment_mandate_id" => "pm_1",
+    "payment_details_id" => "pr_x",
+    "payment_details_total" => { "label" => "Total", "amount" => Ai2Web::Ap2.amount(29.97, "GBP") },
+    "payment_response" => { "method_name" => "card", "payer_email" => "a@b.com" }
+  }
+})
+check(ap2_pd["payment_details_id"] == "pr_x" && ap2_pd["method"] == "card" && ap2_pd["payer_email"] == "a@b.com", "ap2: payment mandate parsed")
+
 puts "\n" + ($failures.zero? ? "ALL PASS" : "#{$failures} FAILED")
 exit($failures.zero? ? 0 : 1)
