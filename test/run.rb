@@ -214,6 +214,9 @@ ap2t = Ai2Web::Ap2.transport
 check(ap2t["enabled"] == true && ap2t["version"] == "0.2.0", "ap2: transport advertises version")
 check(ap2t["extension"].include?("ap2"), "ap2: transport carries the extension uri")
 
+ap2_golden = { "z" => "a/b", "currency" => "GBP", "n" => 10.0, "items" => [{ "value" => 9.99, "label" => "Mug" }], "ok" => true }
+check(Ai2Web::Ap2.canonical(ap2_golden) == '{"currency":"GBP","items":[{"label":"Mug","value":9.99}],"n":10,"ok":true,"z":"a/b"}', "ap2: JCS canonical is cross-SDK stable", Ai2Web::Ap2.canonical(ap2_golden))
+
 ap2_intent = Ai2Web::Ap2.intent_mandate("a red basketball shoe", skus: ["SHOE-1"], now: 1000)
 check(ap2_intent["natural_language_description"] == "a red basketball shoe" && ap2_intent["skus"] == ["SHOE-1"] && !ap2_intent["intent_expiry"].empty?, "ap2: intent mandate built")
 

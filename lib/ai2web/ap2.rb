@@ -177,8 +177,50 @@ module Ai2Web
 
     # --- helpers ---
 
+    # JCS (RFC 8785) canonicalisation, so a cart_hash is byte-identical across every SDK: object
+    # keys sorted, no whitespace, minimal string escaping, integers without a decimal point,
+    # currency amounts as a short decimal.
     def canonical(value)
-      JSON.generate(value)
+      case value
+      when nil then "null"
+      when true then "true"
+      when false then "false"
+      when Integer then value.to_s
+      when Float then jcs_number(value)
+      when String then jcs_string(value)
+      when Array then "[#{value.map { |e| canonical(e) }.join(',')}]"
+      when Hash
+        pairs = value.map { |k, v| [k.to_s, v] }.sort_by { |k, _| k }
+        "{#{pairs.map { |k, v| "#{jcs_string(k)}:#{canonical(v)}" }.join(',')}}"
+      else "null"
+      end
+    end
+
+    def jcs_number(x)
+      return x.to_i.to_s if x == x.to_i && x.abs < 1e15
+
+      format("%.2f", x).sub(/0+\z/, "").sub(/\.\z/, "")
+    end
+
+    def jcs_string(str)
+      out = +'"'
+      str.each_char do |ch|
+        o = ch.ord
+        if ch == '"'
+          out << '\\"'
+        elsif ch == "\\"
+          out << "\\\\"
+        elsif o == 0x08 then out << "\\b"
+        elsif o == 0x09 then out << "\\t"
+        elsif o == 0x0A then out << "\\n"
+        elsif o == 0x0C then out << "\\f"
+        elsif o == 0x0D then out << "\\r"
+        elsif o < 0x20 then out << format("\\u%04x", o)
+        else out << ch
+        end
+      end
+      out << '"'
+      out
     end
 
     def b64url(bin)
