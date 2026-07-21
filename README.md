@@ -9,6 +9,8 @@
 
 # AI2Web Ruby SDK (`ai2web`)
 
+[![AI2Web on Launchpadly - Product of the Week (Gold)](https://launchpadly.co/embed/badges/startup/ai2web.svg?variant=product-week-gold)](https://launchpadly.co/startup/ai2web?ref=badge)
+
 [![CI](https://github.com/ai2web-foundation/ai2web-ruby/actions/workflows/ci.yml/badge.svg)](https://github.com/ai2web-foundation/ai2web-ruby/actions/workflows/ci.yml)
 [![Gem Version](https://img.shields.io/gem/v/ai2web)](https://rubygems.org/gems/ai2web)
 
