@@ -246,5 +246,17 @@ ap2_pd = Ai2Web::Ap2.payment_details({
 })
 check(ap2_pd["payment_details_id"] == "pr_x" && ap2_pd["method"] == "card" && ap2_pd["payer_email"] == "a@b.com", "ap2: payment mandate parsed")
 
+# NLWeb (nlweb.ai) interop
+nlt = Ai2Web::Nlweb.transport
+check(nlt["enabled"] == true && nlt["version"] == "0.55" && !nlt["ask"].empty?, "nlweb: transport advertises ask endpoint")
+
+nlr = Ai2Web::Nlweb.ask_response("red shoes", [
+  { url: "https://s.example/1", name: "Red Shoe", description: "A red running shoe", score: 90 },
+  { url: "https://s.example/2", title: "Crimson Sneaker" }
+], site: "store")
+check(nlr["results"][0]["@type"] == "Item" && nlr["results"][0]["name"] == "Red Shoe" && nlr["results"][0]["score"] == 90 && nlr["results"][0]["site"] == "store", "nlweb: item fields mapped", nlr["results"][0])
+check(nlr["results"][1]["name"] == "Crimson Sneaker" && nlr["results"][1]["schema_object"]["@type"] == "Thing", "nlweb: title falls back to name + schema_object built")
+check(nlr["results"].length == 2 && nlr["query"] == "red shoes", "nlweb: ask response envelope")
+
 puts "\n" + ($failures.zero? ? "ALL PASS" : "#{$failures} FAILED")
 exit($failures.zero? ? 0 : 1)
