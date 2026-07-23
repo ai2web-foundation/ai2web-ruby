@@ -87,10 +87,84 @@ module Ai2Web
         }
       }
     end
+
+    # OAuth 2.0 Protected Resource metadata (RFC 9728), for
+    # /.well-known/oauth-protected-resource. MCP clients read this to discover which
+    # authorization server guards the resource before starting a flow.
+    #
+    # Returns nil when the site does not advertise oauth2, so an auth surface the site cannot
+    # honour is never published.
+    def to_oauth_protected_resource(manifest)
+      m = Util.deep_stringify(manifest)
+      auth = m["auth"].is_a?(Hash) ? m["auth"] : {}
+      return nil unless Array(auth["methods"]).include?("oauth2")
+
+      site = m["site"].is_a?(Hash) ? m["site"] : {}
+      base = Util.trim_url(site["url"].to_s)
+      oauth2 = auth["oauth2"].is_a?(Hash) ? auth["oauth2"] : {}
+      issuer = base
+      authz = oauth2["authorization_url"].to_s
+      unless authz.empty?
+        begin
+          u = URI.parse(authz)
+          issuer = "#{u.scheme}://#{u.host}#{u.port && ![80, 443].include?(u.port) ? ":#{u.port}" : ""}" if u.scheme && u.host
+        rescue URI::InvalidURIError
+          # keep the site base as issuer
+        end
+      end
+      doc = {
+        "resource" => "#{base}/ai2w",
+        "authorization_servers" => [issuer],
+        "bearer_methods_supported" => ["header"]
+      }
+      scopes = oauth2["scopes"]
+      doc["scopes_supported"] = Array(scopes) if scopes && !Array(scopes).empty?
+      doc
+    end
+
+    # Map usage_policy onto Content Signals tokens. `search` stays yes because AI2Web exists to
+    # be discoverable; the AI signals are only asserted when the manifest states them, so an
+    # unset policy is never reported as a refusal. Nil when no policy is declared.
+    def to_content_signals(manifest)
+      m = Util.deep_stringify(manifest)
+      p = m["usage_policy"]
+      return nil unless p.is_a?(Hash) && !p.empty?
+
+      signals = ["search=yes"]
+      signals << "ai-input=#{p["content_reproduction"] ? "yes" : "no"}" if [true, false].include?(p["content_reproduction"])
+      signals << "ai-train=#{p["model_training"] ? "yes" : "no"}" if [true, false].include?(p["model_training"])
+      signals.join(", ")
+    end
+
+    # A robots.txt FRAGMENT carrying the usage policy and a pointer to the manifest. Append it to
+    # an existing robots.txt; it is never a replacement, and emits no Disallow rules.
+    def to_robots_txt(manifest)
+      m = Util.deep_stringify(manifest)
+      site = m["site"].is_a?(Hash) ? m["site"] : {}
+      base = Util.trim_url(site["url"].to_s)
+      lines = ["# AI2Web usage policy, projected from #{base}/ai2w", "User-agent: *"]
+      signals = to_content_signals(m)
+      lines << "Content-Signal: #{signals}" unless signals.nil?
+      lines << "# bulk_extraction: false - please use the /ai2w endpoints instead of crawling" if
+        m["usage_policy"].is_a?(Hash) && m["usage_policy"]["bulk_extraction"] == false
+      lines << "# AI2Web-Manifest: #{base}/ai2w"
+      "#{lines.join("\n")}\n"
+    end
+
+    # Value for an HTTP Link header advertising the manifest to non-HTML clients.
+    def to_discovery_link_header(manifest)
+      m = Util.deep_stringify(manifest)
+      site = m["site"].is_a?(Hash) ? m["site"] : {}
+      "<#{Util.trim_url(site["url"].to_s)}/ai2w>; rel=\"ai2w\""
+    end
   end
 
   module_function
 
   def to_llms_txt(manifest) = Export.to_llms_txt(manifest)
   def to_agent_json(manifest) = Export.to_agent_json(manifest)
+  def to_oauth_protected_resource(manifest) = Export.to_oauth_protected_resource(manifest)
+  def to_content_signals(manifest) = Export.to_content_signals(manifest)
+  def to_robots_txt(manifest) = Export.to_robots_txt(manifest)
+  def to_discovery_link_header(manifest) = Export.to_discovery_link_header(manifest)
 end
